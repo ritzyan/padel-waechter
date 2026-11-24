@@ -67,6 +67,14 @@ SEITE = """<!doctype html>
 <form class="karte" method="post" action="{{ url_for('speichern') }}">
   <strong>Abfragezeitraum</strong>
 
+  <label>Clubs</label>
+  <div class="tage">
+    {% for club in cfg.clubs %}
+      <label><input type="checkbox" name="clubs" value="{{ club.slug }}"
+        {{ 'checked' if club.aktiv }}> {{ club.name }}</label>
+    {% endfor %}
+  </div>
+
   <label>Wochentage</label>
   <div class="tage">
     {% for name in tage %}
@@ -136,12 +144,17 @@ def umschalten():
 @app.post("/speichern")
 def speichern():
     cfg = pc.lade_config()
+    gewaehlt = set(request.form.getlist("clubs"))
+    for club in cfg["clubs"]:
+        club["aktiv"] = club["slug"] in gewaehlt
     cfg["wochentage"] = request.form.getlist("wochentage")
     cfg["start_von"] = request.form.get("start_von", "")
     cfg["start_bis"] = request.form.get("start_bis", "")
     cfg["dauer_min"] = request.form.get("dauer_min", "")
     cfg["tage_im_voraus"] = request.form.get("tage_im_voraus", "")
     gespeichert = pc.speichere_config(cfg)
+    if not any(c["aktiv"] for c in gespeichert["clubs"]):
+        return redirect(url_for("start", m="Gespeichert, aber ohne Club wird nichts geprüft."))
     if not gespeichert["wochentage"]:
         return redirect(url_for("start", m="Gespeichert, aber ohne Wochentag wird nichts geprüft."))
     return redirect(url_for("start", m="Gespeichert."))
