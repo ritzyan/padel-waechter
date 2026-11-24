@@ -76,6 +76,7 @@ SEITE = """<!doctype html>
            font-weight: 800; font-size: .88rem; }
   .pille.fehler { color: var(--bad); }
   .pille.pause { color: var(--mute); }
+  .status .leer { font-weight: 750; opacity: 1; }
   .status form { margin: 0; }
   .jetzt { width: 100%; padding: 14px; border: 0; border-radius: 14px; background: var(--ball); color: var(--ink);
            font: inherit; font-weight: 800; font-size: 1.05rem; cursor: pointer; }
@@ -168,6 +169,13 @@ SEITE = """<!doctype html>
         {{ erg if erg.startswith('Fehler') or erg == 'pausiert' else 'ok' }}</span>{% endif %}</p>
     <p>Letzte Meldung: {{ status.get('letzte_meldung', 'noch keine') }}
       {% if status.get('letzte_treffer') %}({{ status.letzte_treffer | join(', ') }}){% endif %}</p>
+    {% if erg == 'ok' %}
+      {% if status.get('frei_jetzt') %}
+      <p>Aktuell frei: {{ status.frei_jetzt | join(', ') }}</p>
+      {% else %}
+      <p class="leer">Keine freien Courts im gewählten Zeitraum.</p>
+      {% endif %}
+    {% endif %}
     <form method="post" action="{{ url_for('jetzt_pruefen') }}">
       <button class="jetzt">Jetzt prüfen</button>
     </form>
