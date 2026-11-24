@@ -1,31 +1,18 @@
 import os
+import sys
 import datetime as dt
 from zoneinfo import ZoneInfo
 import requests
 
-BASE = os.path.dirname(os.path.abspath(__file__))
+import padel_config as pc
 
-
-def lade_env():
-    pfad = os.path.join(BASE, ".env")
-    if os.path.exists(pfad):
-        with open(pfad, encoding="utf-8") as f:
-            for zeile in f:
-                zeile = zeile.strip()
-                if zeile and not zeile.startswith("#") and "=" in zeile:
-                    k, v = zeile.split("=", 1)
-                    os.environ.setdefault(k.strip(), v.strip())
-
-
-lade_env()
+pc.lade_env()
 
 TENANT_ID = os.environ["PLAYTOMIC_TENANT_ID"]
 TOPIC = os.environ["NTFY_TOPIC"]
 
-WUNSCH_UHRZEIT = "20:00:00"
-DAUER_MIN = 90
-TAGE_IM_VORAUS = 14
-STATE_FILE = os.path.join(BASE, "gemeldet.txt")
+STATE_FILE = os.path.join(pc.BASE, "gemeldet.txt")
+WOCHENTAGE = ["Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag", "Sonntag"]
 
 HEADERS = {
     "accept": "*/*",
@@ -42,13 +29,18 @@ HEADERS = {
 }
 
 
-def ziel_montage():
-    heute = dt.datetime.now(ZoneInfo("Europe/Berlin")).date()
-    tage = [heute + dt.timedelta(days=i) for i in range(TAGE_IM_VORAUS + 1)]
-    return [t for t in tage if t.weekday() == 0]
+def jetzt():
+    return dt.datetime.now(ZoneInfo("Europe/Berlin"))
 
 
-def slot_frei(tag):
+def ziel_tage(cfg):
+    heute = jetzt().date()
+    tage = [heute + dt.timedelta(days=i) for i in range(cfg["tage_im_voraus"] + 1)]
+    return [t for t in tage if t.weekday() in cfg["wochentage"]]
+
+
+def freie_startzeiten(tag, cfg):
+    """Gibt die passenden freien Startzeiten (HH:MM) für einen Tag zurück."""
     r = requests.get(
         "https://playtomic.com/api/clubs/availability",
         params={"tenant_id": TENANT_ID, "date": str(tag), "sport_id": "PADEL"},
@@ -56,18 +48,20 @@ def slot_frei(tag):
         timeout=30,
     )
     if not r.ok:
-        raise SystemExit(f"{r.status_code}: {r.text[:500]}")
+        raise RuntimeError(f"Playtomic {r.status_code}")
+    treffer = set()
     for court in r.json():
         for slot in court.get("slots", []):
-            if slot.get("start_time") == WUNSCH_UHRZEIT and slot.get("duration") == DAUER_MIN:
-                return True
-    return False
+            zeit = (slot.get("start_time") or "")[:5]
+            if slot.get("duration") == cfg["dauer_min"] and cfg["start_von"] <= zeit <= cfg["start_bis"]:
+                treffer.add(zeit)
+    return sorted(treffer)
 
 
 def gemeldet():
     try:
         with open(STATE_FILE) as f:
-            return set(f.read().split())
+            return set(f.read().split("\n"))
     except FileNotFoundError:
         return set()
 
@@ -76,22 +70,59 @@ def push(text):
     r = requests.post(
         f"https://ntfy.sh/{TOPIC}",
         data=text.encode("utf-8"),
-        headers={"Title": "Padel-Slot frei", "Click": "https://playtomic.com"},
+        headers={"Title": "Padel-Slot frei", "Click": "https://playtomic.com/clubs/padel-club-weinstrasse"},
         timeout=30,
     )
     r.raise_for_status()
 
 
-def main():
+def pruefe(cfg):
+    """Prüft alle Zieltage, meldet neue Treffer und gibt sie zurück."""
     schon = gemeldet()
-    for tag in ziel_montage():
-        if str(tag) in schon:
+    neu = []
+    for tag in ziel_tage(cfg):
+        zeiten = [z for z in freie_startzeiten(tag, cfg) if f"{tag} {z}" not in schon]
+        if not zeiten:
             continue
-        if slot_frei(tag):
-            push(f"Montag {tag}, 20:00 Uhr, 90 Min, Padel Club Weinstraße. Jetzt buchen!")
-            with open(STATE_FILE, "a") as f:
-                f.write(f"{tag}\n")
+        text = (
+            f"{WOCHENTAGE[tag.weekday()]} {tag.strftime('%d.%m.')}: frei um "
+            f"{', '.join(zeiten)} Uhr ({cfg['dauer_min']} Min), Padel Club Weinstraße. Jetzt buchen!"
+        )
+        push(text)
+        with open(STATE_FILE, "a") as f:
+            for z in zeiten:
+                f.write(f"{tag} {z}\n")
+        neu.extend(f"{tag.strftime('%d.%m.')} {z}" for z in zeiten)
+    return neu
+
+
+def main():
+    cfg = pc.lade_config()
+    status = {"letzter_lauf": jetzt().strftime("%d.%m.%Y %H:%M:%S")}
+    if not cfg["aktiv"]:
+        status["ergebnis"] = "pausiert"
+        pc.speichere_status(status)
+        return 0
+    try:
+        neu = pruefe(cfg)
+    except Exception as e:  # Netzwerkfehler usw. sollen den Cron-Job nicht zerlegen
+        status["ergebnis"] = f"Fehler: {e}"
+        pc.speichere_status(status)
+        print(status["ergebnis"], file=sys.stderr)
+        return 1
+    status["ergebnis"] = "ok"
+    status["neu_gemeldet"] = neu
+    if neu:
+        status["letzte_meldung"] = status["letzter_lauf"]
+        status["letzte_treffer"] = neu
+    else:
+        alt = pc.lade_status()
+        for k in ("letzte_meldung", "letzte_treffer"):
+            if k in alt:
+                status[k] = alt[k]
+    pc.speichere_status(status)
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
