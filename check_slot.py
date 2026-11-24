@@ -3,13 +3,29 @@ import datetime as dt
 from zoneinfo import ZoneInfo
 import requests
 
+BASE = os.path.dirname(os.path.abspath(__file__))
+
+
+def lade_env():
+    pfad = os.path.join(BASE, ".env")
+    if os.path.exists(pfad):
+        with open(pfad, encoding="utf-8") as f:
+            for zeile in f:
+                zeile = zeile.strip()
+                if zeile and not zeile.startswith("#") and "=" in zeile:
+                    k, v = zeile.split("=", 1)
+                    os.environ.setdefault(k.strip(), v.strip())
+
+
+lade_env()
+
 TENANT_ID = os.environ["PLAYTOMIC_TENANT_ID"]
 TOPIC = os.environ["NTFY_TOPIC"]
 
 WUNSCH_UHRZEIT = "20:00:00"
 DAUER_MIN = 90
 TAGE_IM_VORAUS = 14
-STATE_FILE = "notified.txt"
+STATE_FILE = os.path.join(BASE, "gemeldet.txt")
 
 
 def ziel_montage():
@@ -35,6 +51,7 @@ def slot_frei(tag):
             if slot.get("start_time") in erlaubt and slot.get("duration") == DAUER_MIN:
                 return True
     return False
+
 
 def gemeldet():
     try:
