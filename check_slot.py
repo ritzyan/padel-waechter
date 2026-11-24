@@ -27,13 +27,6 @@ DAUER_MIN = 90
 TAGE_IM_VORAUS = 14
 STATE_FILE = os.path.join(BASE, "gemeldet.txt")
 
-
-def ziel_montage():
-    heute = dt.datetime.now(ZoneInfo("Europe/Berlin")).date()
-    tage = [heute + dt.timedelta(days=i) for i in range(TAGE_IM_VORAUS + 1)]
-    return [t for t in tage if t.weekday() == 0]
-
-
 HEADERS = {
     "accept": "*/*",
     "accept-language": "de,de-DE;q=0.9,en;q=0.8",
@@ -49,6 +42,12 @@ HEADERS = {
 }
 
 
+def ziel_montage():
+    heute = dt.datetime.now(ZoneInfo("Europe/Berlin")).date()
+    tage = [heute + dt.timedelta(days=i) for i in range(TAGE_IM_VORAUS + 1)]
+    return [t for t in tage if t.weekday() == 0]
+
+
 def slot_frei(tag):
     r = requests.get(
         "https://playtomic.com/api/clubs/availability",
@@ -58,7 +57,7 @@ def slot_frei(tag):
     )
     if not r.ok:
         raise SystemExit(f"{r.status_code}: {r.text[:500]}")
-        for court in r.json():
+    for court in r.json():
         for slot in court.get("slots", []):
             if slot.get("start_time") == WUNSCH_UHRZEIT and slot.get("duration") == DAUER_MIN:
                 return True
@@ -77,7 +76,7 @@ def push(text):
     r = requests.post(
         f"https://ntfy.sh/{TOPIC}",
         data=text.encode("utf-8"),
-        headers={"Title": "Padel-Slot frei", "Click": "https://playtomic.io"},
+        headers={"Title": "Padel-Slot frei", "Click": "https://playtomic.com"},
         timeout=30,
     )
     r.raise_for_status()
