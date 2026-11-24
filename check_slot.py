@@ -20,7 +20,7 @@ def ziel_montage():
 
 def slot_frei(tag):
     r = requests.get(
-        "https://playtomic.io/api/v1/availability",
+        "https://api.playtomic.io/v1/availability",
         params={
             "user_id": "me",
             "tenant_id": TENANT_ID,
@@ -30,7 +30,8 @@ def slot_frei(tag):
         },
         timeout=30,
     )
-    r.raise_for_status()
+    if not r.ok:
+        raise SystemExit(f"{r.status_code}: {r.text[:500]}")
     for court in r.json():
         for slot in court.get("slots", []):
             if slot.get("start_time") == WUNSCH_UHRZEIT and slot.get("duration") == DAUER_MIN:
