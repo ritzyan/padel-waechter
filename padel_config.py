@@ -6,8 +6,16 @@ BASE = os.path.dirname(os.path.abspath(__file__))
 CONFIG_FILE = os.path.join(BASE, "config.json")
 STATUS_FILE = os.path.join(BASE, "status.json")
 
+STANDARD_CLUBS = [
+    {"name": "Padel Club Weinstraße", "tenant_id": "4b46d073-1c71-4f3d-b2ae-26c6bfea1327",
+     "slug": "padel-club-weinstrasse", "aktiv": True},
+    {"name": "APX. Padel Club", "tenant_id": "7d52aadc-c728-44e3-a996-252fa532d5df",
+     "slug": "apx-padel-club", "aktiv": True},
+]
+
 STANDARD = {
     "aktiv": True,
+    "clubs": STANDARD_CLUBS,
     "wochentage": [0],      # 0 = Montag ... 6 = Sonntag
     "start_von": "20:00",   # früheste Startzeit
     "start_bis": "20:00",   # späteste Startzeit
@@ -39,6 +47,16 @@ def bereinige(roh):
     """Macht aus beliebigen Eingaben eine gültige Konfiguration."""
     cfg = dict(STANDARD)
     cfg["aktiv"] = bool(roh.get("aktiv", STANDARD["aktiv"]))
+
+    clubs = []
+    for c in roh.get("clubs", STANDARD_CLUBS):
+        if not isinstance(c, dict):
+            continue
+        name, tid, slug = c.get("name"), c.get("tenant_id"), c.get("slug")
+        if not (isinstance(name, str) and isinstance(tid, str) and isinstance(slug, str)):
+            continue
+        clubs.append({"name": name, "tenant_id": tid, "slug": slug, "aktiv": bool(c.get("aktiv", True))})
+    cfg["clubs"] = clubs or [dict(c) for c in STANDARD_CLUBS]
 
     tage = []
     for t in roh.get("wochentage", STANDARD["wochentage"]):
