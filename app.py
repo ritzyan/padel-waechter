@@ -1,3 +1,4 @@
+import datetime
 import os
 import subprocess
 import sys
@@ -10,6 +11,25 @@ pc.lade_env()
 app = Flask(__name__)
 PASSWORT = os.environ.get("APP_PASSWORD", "")
 TAGE = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"]
+
+
+def gruppiere(eintraege):
+    """'APX. Padel Club 30.11. 21:00' -> [(Club, [('Mo 30.11.', ['21:00', ...])])]"""
+    heute = datetime.date.today()
+    gruppen = {}
+    for e in eintraege or []:
+        try:
+            club, datum, zeit = e.rsplit(" ", 2)
+            tag, monat = int(datum.split(".")[0]), int(datum.split(".")[1])
+            jahr = heute.year + (1 if (monat, tag) < (heute.month, heute.day) and heute.month - monat > 6 else 0)
+            wochentag = TAGE[datetime.date(jahr, monat, tag).weekday()]
+        except (ValueError, IndexError):
+            continue
+        gruppen.setdefault(club, {}).setdefault((monat, tag, f"{wochentag} {datum}"), []).append(zeit)
+    return [
+        (club, [(label, sorted(zeiten)) for (_, _, label), zeiten in sorted(tage.items())])
+        for club, tage in gruppen.items()
+    ]
 
 
 @app.before_request
@@ -76,6 +96,11 @@ SEITE = """<!doctype html>
            font-weight: 800; font-size: .88rem; }
   .pille.fehler { color: var(--bad); }
   .pille.pause { color: var(--mute); }
+  .status details { margin-top: 6px; }
+  .status summary { cursor: pointer; font-weight: 750; opacity: 1; }
+  .plaetze { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 10px; }
+  .plaetze strong { display: block; }
+  .plaetze div { font-variant-numeric: tabular-nums; opacity: .92; }
   .status .leer { font-weight: 750; opacity: 1; }
   .status form { margin: 0; }
   .jetzt { width: 100%; padding: 14px; border: 0; border-radius: 14px; background: var(--ball); color: var(--ink);
@@ -167,11 +192,23 @@ SEITE = """<!doctype html>
     <p>Letzter Lauf: {{ status.get('letzter_lauf', 'noch keiner') }}
       {% if erg %}<span class="pille {{ 'fehler' if erg.startswith('Fehler') else ('pause' if erg == 'pausiert' else '') }}">
         {{ erg if erg.startswith('Fehler') or erg == 'pausiert' else 'ok' }}</span>{% endif %}</p>
+    {% macro liste(gruppen) %}
+    <ul class="plaetze">
+      {% for club, tage in gruppen %}
+      <li><strong>{{ club }}</strong>
+        {% for tag, zeiten in tage %}<div>{{ tag }} · {{ zeiten | join(' · ') }}</div>{% endfor %}
+      </li>
+      {% endfor %}
+    </ul>
+    {% endmacro %}
     <p>Letzte Meldung: {{ status.get('letzte_meldung', 'noch keine') }}
-      {% if status.get('letzte_treffer') %}({{ status.letzte_treffer | join(', ') }}){% endif %}</p>
+      {% if status.get('letzte_treffer') %}({{ status.letzte_treffer | length }} Plätze){% endif %}</p>
     {% if erg == 'ok' %}
-      {% if status.get('frei_jetzt') %}
-      <p>Aktuell frei: {{ status.frei_jetzt | join(', ') }}</p>
+      {% if frei %}
+      <details open>
+        <summary>Aktuell frei ({{ status.frei_jetzt | length }})</summary>
+        {{ liste(frei) }}
+      </details>
       {% else %}
       <p class="leer">Keine freien Courts im gewählten Zeitraum.</p>
       {% endif %}
@@ -254,8 +291,10 @@ SEITE = """<!doctype html>
 
 
 def render(meldung=None):
+    cfg, status = pc.lade_config(), pc.lade_status()
     return render_template_string(
-        SEITE, cfg=pc.lade_config(), status=pc.lade_status(), tage=TAGE, meldung=meldung
+        SEITE, cfg=cfg, status=status, tage=TAGE, meldung=meldung,
+        frei=gruppiere(status.get('frei_jetzt'))
     )
 
 
