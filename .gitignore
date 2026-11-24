@@ -1,3 +1,5 @@
 .env
 gemeldet.txt
 padel.log
+config.json
+status.json
