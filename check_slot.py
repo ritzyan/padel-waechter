@@ -20,24 +20,21 @@ def ziel_montage():
 
 def slot_frei(tag):
     r = requests.get(
-        "https://playtomic.io/api/v1/availability",
-        params={
-            "user_id": "me",
-            "tenant_id": TENANT_ID,
-            "sport_id": "PADEL",
-            "local_start_min": f"{tag}T00:00:00",
-            "local_start_max": f"{tag}T23:59:59",
-        },
+        "https://playtomic.com/api/clubs/availability",
+        params={"tenant_id": TENANT_ID, "date": str(tag), "sport_id": "PADEL"},
+        headers={"User-Agent": "Mozilla/5.0"},
         timeout=30,
     )
     if not r.ok:
         raise SystemExit(f"{r.status_code}: {r.text[:500]}")
+    lokal = dt.datetime.combine(tag, dt.time(20, 0), tzinfo=ZoneInfo("Europe/Berlin"))
+    utc = lokal.astimezone(dt.timezone.utc).strftime("%H:%M:%S")
+    erlaubt = {WUNSCH_UHRZEIT, utc}
     for court in r.json():
         for slot in court.get("slots", []):
-            if slot.get("start_time") == WUNSCH_UHRZEIT and slot.get("duration") == DAUER_MIN:
+            if slot.get("start_time") in erlaubt and slot.get("duration") == DAUER_MIN:
                 return True
     return False
-
 
 def gemeldet():
     try:
