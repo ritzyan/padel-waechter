@@ -20,7 +20,7 @@ def ziel_montage():
 
 def slot_frei(tag):
     r = requests.get(
-        "https://api.playtomic.io/v1/availability",
+        "https://playtomic.io/api/v1/availability",
         params={
             "user_id": "me",
             "tenant_id": TENANT_ID,
