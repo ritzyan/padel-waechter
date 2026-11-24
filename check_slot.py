@@ -34,11 +34,26 @@ def ziel_montage():
     return [t for t in tage if t.weekday() == 0]
 
 
+HEADERS = {
+    "accept": "*/*",
+    "accept-language": "de,de-DE;q=0.9,en;q=0.8",
+    "cookie": "pt_web_opened=1",
+    "referer": "https://playtomic.com/clubs/padel-club-weinstrasse",
+    "sec-ch-ua": '"Chromium";v="158", "Not.A/Brand";v="24", "Microsoft Edge";v="158"',
+    "sec-ch-ua-mobile": "?0",
+    "sec-ch-ua-platform": '"Windows"',
+    "sec-fetch-dest": "empty",
+    "sec-fetch-mode": "cors",
+    "sec-fetch-site": "same-origin",
+    "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/158.0.0.0 Safari/537.36 Edg/158.0.0.0",
+}
+
+
 def slot_frei(tag):
     r = requests.get(
         "https://playtomic.com/api/clubs/availability",
         params={"tenant_id": TENANT_ID, "date": str(tag), "sport_id": "PADEL"},
-        headers={"User-Agent": "Mozilla/5.0"},
+        headers=HEADERS,
         timeout=30,
     )
     if not r.ok:
