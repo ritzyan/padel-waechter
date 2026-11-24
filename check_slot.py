@@ -79,11 +79,12 @@ def push(text, link):
 
 
 def pruefe_club(club, cfg, schon):
-    """Prüft einen Club, meldet neue Treffer und gibt sie zurück."""
-    neu = []
+    """Prüft einen Club. Gibt (neu gemeldet, aktuell frei) zurück."""
+    neu, frei = [], []
     for tag in ziel_tage(cfg):
-        zeiten = [z for z in freie_startzeiten(club, tag, cfg)
-                  if f"{club['slug']} {tag} {z}" not in schon]
+        alle = freie_startzeiten(club, tag, cfg)
+        frei.extend(f"{club['name']} {tag.strftime('%d.%m.')} {z}" for z in alle)
+        zeiten = [z for z in alle if f"{club['slug']} {tag} {z}" not in schon]
         if not zeiten:
             continue
         text = (
@@ -95,43 +96,44 @@ def pruefe_club(club, cfg, schon):
             for z in zeiten:
                 f.write(f"{club['slug']} {tag} {z}\n")
         neu.extend(f"{club['name']} {tag.strftime('%d.%m.')} {z}" for z in zeiten)
-    return neu
+    return neu, frei
 
 
 def pruefe(cfg):
     """Prüft alle aktiven Clubs. Ein Fehler bei einem Club stoppt die anderen nicht."""
     schon = gemeldet()
-    neu, fehler = [], []
+    neu, frei, fehler = [], [], []
     for club in cfg["clubs"]:
         if not club["aktiv"]:
             continue
         try:
-            neu.extend(pruefe_club(club, cfg, schon))
+            n, f = pruefe_club(club, cfg, schon)
+            neu.extend(n)
+            frei.extend(f)
         except Exception as e:
             fehler.append(f"{club['name']}: {e}")
-    return neu, fehler
+    return neu, frei, fehler
 
 
 def main():
     cfg = pc.lade_config()
+    alt = pc.lade_status()
     status = {"letzter_lauf": jetzt().strftime("%d.%m.%Y %H:%M:%S")}
+    for k in ("letzte_meldung", "letzte_treffer"):  # bleiben bis zur nächsten Meldung erhalten
+        if k in alt:
+            status[k] = alt[k]
     if not cfg["aktiv"]:
         status["ergebnis"] = "pausiert"
         pc.speichere_status(status)
         return 0
-    neu, fehler = pruefe(cfg)
+    neu, frei, fehler = pruefe(cfg)
     status["ergebnis"] = "Fehler: " + "; ".join(fehler) if fehler else "ok"
     if fehler:
         print(status["ergebnis"], file=sys.stderr)
-    status["neu_gemeldet"] = neu
+    status["frei_jetzt"] = frei
     if neu:
         status["letzte_meldung"] = status["letzter_lauf"]
         status["letzte_treffer"] = neu
-    else:
-        alt = pc.lade_status()
-        for k in ("letzte_meldung", "letzte_treffer"):
-            if k in alt:
-                status[k] = alt[k]
     pc.speichere_status(status)
     return 1 if fehler else 0
 
